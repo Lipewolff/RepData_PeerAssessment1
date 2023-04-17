@@ -1,25 +1,204 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "Reproducible Research - Course project 1"
+author: "Felipe Wolff"
+date: "`r Sys.Date()`"
+output: html_document
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
 
-## Loading and preprocessing the data
+## Library
+
+The packages that will be used:
+```{r library, echo = TRUE}
+
+library(dplyr)
+library(ggplot2)
+library(scales)
+
+```
+
+## Loading and processing the data
+```{r data, echo = TRUE}
+activity <- read.csv("activity.csv")
+
+activity$date <- as.Date(activity$date, "%Y-%m-%d")
+activity <- tibble::as_tibble(activity)
+activity
+str(activity)
+```
+## Q1: What is mean total number of steps taken per day?
+
+* Calculate the total number of steps taken per day
+the data set had to be cleaned by removing the NA values in each row, this was made by complete cases function.
+
+```{r complete, echo = TRUE}
+act_na_rm <- activity[complete.cases(activity),]
+act_na_rm <- tibble::as_tibble(act_na_rm)
+act_na_rm
+
+```
+
+* Histogram for total step per day in ggplot2
+
+The histogram takes the base of complete cases
+
+```{r histogram total steps per day}
+
+ggplot(act_na_rm, aes(x=date, y=steps)) + 
+  geom_histogram(stat = "identity", width=0.5) +
+        xlab("Date")+ ylab("Total steps")+
+        ggtitle("Histogram of total steps per day")+
+        theme(plot.title=element_text(hjust=0.5))+
+        theme_classic()
+
+```
+
+* Calculate and report the mean and median of the total number of steps taken per day
+
+```{r steps, echo =TRUE}
+
+steps_narm <- mean(activity$steps, na.rm= TRUE)
+
+mean_steps <- mean(steps_narm)
+print(mean_steps)
+median_stepsnarm <- median(steps_narm)
+print(median_stepsnarm)
 
 
 
-## What is mean total number of steps taken per day?
+```
+
+There is differences betwen the complete cases data frame and the na.rm function median and mean, so in order to mantain the consistency, the analysis will be performed with the complete data set and the NA values will be replaced with the mean of the day.
+
+## Q2: What is the average daily activity pattern?
+
+Calculating the average daily pattern, first I make a variable called "day_mean", that includes the means of steps per day, this variable does not includes the NA values of the rows.
+
+```{r average, echo= TRUE}
+
+day_mean <- with(na.omit(activity), tapply(steps, interval, mean))
+day_max <- day_mean
+day_mean <- tibble::as.tibble(day_mean)
+
+dates <- activity %>% group_by(date) %>% 
+        group_by(interval) %>%
+        summarise(meansteps = mean(steps, na.rm=TRUE))
+dates
+
+```
+You can also embed plots, for example:
+
+```{r plot, echo=TRUE}
+plot(x = dates$interval, y = day_mean$value, type= "l", ylab= "Mean daily value",
+     xlab="5 minutes intervals", main = "Average daily activity pattern")
+```
 
 
+Maximum activity record in interval 835, equals to 206.2
 
-## What is the average daily activity pattern?
+```{r max min, echo =TRUE}
+day_max[which(day_max == max(day_max))]
 
+```
+## Inputing missing values
 
+* Total number of Na in data set
+```{r NA count, echo = TRUE}
 
-## Imputing missing values
+NA_steps <- activity[is.na(activity$steps),]
+sum(is.na(NA_steps$steps))
 
+```
 
+* Ratio of NA observations
+```{r NA ratio, echo = TRUE}
+na_ratio <- sum(is.na(activity$steps))/length(activity$steps)
+percent(na_ratio)
+```
+
+Replace the NA's in original Data frame with the mean of interval-date steps
+
+```{r mean fill, echo = TRUE}
+
+NA_steps$steps <- replace(NA_steps$steps, dates$interval %in% NA_steps$interval,
+                          dates$meansteps)
+activity$steps <- replace(activity$steps, 
+                          activity$interval %in% NA_steps$interval &
+                          activity$date %in% NA_steps$date, NA_steps$steps)
+
+head(activity)
+tail(activity)
+```
+
+* histogram of daily steps
+
+```{r graph 2, echo = TRUE}
+
+ggplot(activity, aes(x=date, y=steps)) + 
+  geom_histogram(stat = "identity", width=0.5) +
+        xlab("Date")+ ylab("Total steps")+
+        ggtitle("Histogram of total steps per day")+
+        theme(plot.title=element_text(hjust=0.5))+
+        theme_classic()
+
+```
+
+* Mean and median estimates with no NA values in data frame
+
+```{r steps total, echo = TRUE}
+steps_mean <- mean(activity$steps)
+steps_mean
+steps_median <- median(activity$steps)
+steps_median
+```
+* what is the impact of impulsing missing data on the estimates of the total daily number of steps?
+
+The mean did not differ form the initial value calculated, but the median value drop off from a value of 37.3826 to 0. Consider the amplitude and the variance of the data frame it seems a very intensive change in the value.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+First I construct a new column with the name of the days and then transformed into a boolean object that qualifies "weekdays"= 1 and "weekend" = 0.
+
+```{r days, echo = TRUE}
+activity <- mutate(activity, day = weekdays(activity$date))
+
+dias <- c('lunes', 'martes', 'miércoles', 'jueves', 'viernes')
+
+# grepl function allows to filter from text
+
+activity$day_cl <- ifelse(grepl("es",activity$day), "weekday", "weekend")
+
+unique(activity$day_cl)
+
+```
+
+then, I create two subsets of the data frame separate the weekdays and the weekend days:
+
+```{r subset weekdays-weekend, echo = TRUE}
+
+weekday <- activity %>% filter(grepl("day",activity$day_cl))
+
+weekend <- activity %>% filter(grepl("end",activity$day_cl))
+
+weekday
+weekend
+
+```
+
+The data set contains the week split into weekdays and weekend. I also made two new data frames for each variable.
+
+```{r graph 3, echo = TRUE}
+
+act_week_cl <- aggregate(steps~interval+day_cl, data = activity, mean)
+
+ggplot(data = act_week_cl, aes(x=interval, y=steps)) +
+  geom_line(color = "blue", size = 0.5) +
+  labs(title = "Comparison between weekday and weekend",
+       y = "Steps", x = "") + 
+  facet_grid(day_cl ~ .) 
+
+```
+
